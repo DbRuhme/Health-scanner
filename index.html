@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Health Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap');
+
+  :root {
+    --bg: #0d0f0e;
+    --surface: #161a17;
+    --surface2: #1e2420;
+    --accent: #7bff8e;
+    --accent2: #b8f5c0;
+    --warn: #ffb347;
+    --danger: #ff6b6b;
+    --text: #e8f0e9;
+    --muted: #6b7a6d;
+    --border: #2a332b;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Mono', monospace; background: var(--bg); color: var(--text); min-height: 100vh; max-width: 480px; margin: 0 auto; padding: 0 0 120px 0; overflow-x: hidden; }
+  .header { padding: 24px 20px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .logo { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 600; color: var(--accent); letter-spacing: -0.5px; }
+  .logo span { color: var(--text); font-weight: 300; font-style: italic; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: all 0.3s; }
+  .status-dot.connected { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .setup-panel { margin: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .setup-panel h3 { font-family: 'Fraunces', serif; font-weight: 300; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 14px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; letter-spacing: 1px; text-transform: uppercase; }
+  .field input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; outline: none; transition: border-color 0.2s; }
+  .field input:focus { border-color: var(--accent); }
+  .field input::placeholder { color: var(--muted); }
+  .btn { width: 100%; padding: 12px; border-radius: 10px; border: none; font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px; }
+  .btn-primary { background: var(--accent); color: #0d0f0e; }
+  .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); margin-top: 8px; }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+  .scanner-section { padding: 16px; }
+  .scanner-container { position: relative; width: 100%; aspect-ratio: 1; border-radius: var(--radius); overflow: hidden; background: #000; border: 1px solid var(--border); }
+  #scanner-viewport { width: 100% !important; height: 100% !important; }
+  #scanner-viewport video { width: 100% !important; height: 100% !important; object-fit: cover; }
+  #scanner-viewport canvas { display: none !important; }
+  .scanner-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+  .scan-frame { width: 65%; aspect-ratio: 1.5; border: 2px solid var(--accent); border-radius: 12px; position: relative; box-shadow: 0 0 0 2000px rgba(0,0,0,0.45); }
+  .scan-frame::before { content: ''; position: absolute; top: -2px; left: -2px; right: -2px; height: 3px; background: var(--accent); border-radius: 12px 12px 0 0; animation: scanline 2s ease-in-out infinite; box-shadow: 0 0 12px var(--accent); }
+  @keyframes scanline { 0%, 100% { top: -2px; opacity: 1; } 50% { top: calc(100% - 1px); opacity: 0.6; } }
+  .corner { position: absolute; width: 18px; height: 18px; }
+  .corner-tl { top: -2px; left: -2px; border-top: 3px solid var(--accent); border-left: 3px solid var(--accent); border-radius: 4px 0 0 0; }
+  .corner-tr { top: -2px; right: -2px; border-top: 3px solid var(--accent); border-right: 3px solid var(--accent); border-radius: 0 4px 0 0; }
+  .corner-bl { bottom: -2px; left: -2px; border-bottom: 3px solid var(--accent); border-left: 3px solid var(--accent); border-radius: 0 0 0 4px; }
+  .corner-br { bottom: -2px; right: -2px; border-bottom: 3px solid var(--accent); border-right: 3px solid var(--accent); border-radius: 0 0 4px 0; }
+  .scan-hint { margin-top: 14px; font-size: 11px; color: rgba(255,255,255,0.7); letter-spacing: 1px; text-transform: uppercase; }
+  .scanner-placeholder { width: 100%; aspect-ratio: 1; border-radius: var(--radius); background: var(--surface); border: 1px dashed var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
+  .scanner-placeholder .icon { font-size: 48px; opacity: 0.4; }
+  .scanner-placeholder p { font-size: 12px; letter-spacing: 0.5px; }
+  .scan-controls { display: flex; gap: 10px; margin-top: 12px; }
+  .scan-controls .btn { flex: 1; }
+  .manual-row { display: flex; gap: 8px; margin-top: 10px; }
+  .manual-row input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; outline: none; }
+  .manual-row input:focus { border-color: var(--accent); }
+  .manual-row input::placeholder { color: var(--muted); }
+  .manual-row .btn { flex: 0 0 auto; width: auto; padding: 10px 16px; font-size: 12px; }
+  .product-card { margin-top: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; animation: slideUp 0.3s ease; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .product-card.success { border-color: var(--accent); }
+  .product-card.not-found { border-color: var(--warn); }
+  .product-header { padding: 16px; display: flex; gap: 14px; align-items: flex-start; border-bottom: 1px solid var(--border); }
+  .product-img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--surface2); flex-shrink: 0; }
+  .product-img-placeholder { width: 56px; height: 56px; border-radius: 10px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+  .product-info { flex: 1; min-width: 0; }
+  .product-name { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; line-height: 1.3; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .product-brand { font-size: 11px; color: var(--muted); letter-spacing: 0.5px; }
+  .product-barcode { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .nutrition-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); }
+  .nut-cell { background: var(--surface); padding: 12px 8px; text-align: center; }
+  .nut-val { font-size: 15px; font-weight: 500; color: var(--accent); display: block; margin-bottom: 3px; }
+  .nut-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .product-form { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .form-field label { display: block; font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .form-field input, .form-field select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; outline: none; }
+  .form-field input:focus, .form-field select:focus { border-color: var(--accent); }
+  .form-field select option { background: var(--surface2); }
+  .save-btn { background: var(--accent); color: #0d0f0e; padding: 14px; border: none; border-radius: 10px; font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; cursor: pointer; width: 100%; letter-spacing: 0.5px; transition: all 0.2s; margin-top: 4px; }
+  .save-btn:hover { background: var(--accent2); }
+  .save-btn:disabled { background: var(--muted); cursor: not-allowed; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--surface); border: 1px solid var(--border); border-radius: 50px; padding: 12px 24px; font-size: 13px; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 100; white-space: nowrap; max-width: 90vw; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--accent); color: var(--accent); }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+  .toast.info { border-color: var(--warn); color: var(--warn); }
+  .history-section { padding: 0 16px; margin-top: 8px; }
+  .section-title { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .history-item:last-child { border-bottom: none; }
+  .history-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+  .history-meta { font-size: 11px; color: var(--muted); text-align: right; }
+  .loading-indicator { display: flex; align-items: center; gap: 10px; padding: 14px 16px; font-size: 12px; color: var(--muted); }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+  .scan-success-pulse { animation: pulse 0.4s ease; }
+  @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+</style>
+</head>
+<body>
+<div class="header"><div class="logo">health<span>scan</span></div><div class="status-dot" id="statusDot"></div></div>
+<div class="setup-panel" id="setupPanel"><h3>Connect to Google Sheet</h3><div class="field"><label>Spreadsheet ID</label><input type="text" id="sheetId" placeholder="1kkEkqG_Dbnd4V9iOs0kn..." /></div><div class="field"><label>OAuth Access Token</label><input type="password" id="accessToken" placeholder="ya29.a0..." /></div><button class="btn btn-primary" onclick="connectSheet()">Connect Sheet</button><button class="btn btn-outline" onclick="toggleSetup()">Hide Setup</button><p style="font-size:10px;color:var(--muted);margin-top:12px;line-height:1.6;">Sheet ID is in your Google Sheets URL.<br>Token from developers.google.com/oauthplayground</p></div>
+<div class="scanner-section"><div id="scannerPlaceholder" class="scanner-placeholder"><div class="icon">📷</div><p>Tap start to scan a barcode</p></div><div id="scannerContainer" class="scanner-container hidden"><div id="scanner-viewport"></div><div class="scanner-overlay"><div class="scan-frame"><div class="corner corner-tl"></div><div class="corner corner-tr"></div><div class="corner corner-bl"></div><div class="corner corner-br"></div></div><div class="scan-hint">Point at barcode</div></div></div><div class="scan-controls"><button class="btn btn-primary" id="startBtn" onclick="startScanner()">Start Scanner</button><button class="btn btn-outline hidden" id="stopBtn" onclick="stopScanner()">Stop</button></div><div class="manual-row"><input type="text" id="manualBarcode" placeholder="Or type barcode manually..." inputmode="numeric" /><button class="btn btn-outline" onclick="lookupManual()">Look up</button></div></div>
+<div id="loadingIndicator" class="loading-indicator hidden"><div class="spinner"></div><span id="loadingText">Looking up product...</span></div>
+<div id="productCard" class="product-card hidden" style="margin:0 16px;"><div class="product-header"><div id="productImgWrap"><div class="product-img-placeholder">🛒</div></div><div class="product-info"><div class="product-name" id="productName">—</div><div class="product-brand" id="productBrand"></div><div class="product-barcode" id="productBarcode"></div></div></div><div class="nutrition-grid"><div class="nut-cell"><span class="nut-val" id="nutCal">—</span><span class="nut-label">Cals</span></div><div class="nut-cell"><span class="nut-val" id="nutPro">—</span><span class="nut-label">Protein</span></div><div class="nut-cell"><span class="nut-val" id="nutCarb">—</span><span class="nut-label">Carbs</span></div><div class="nut-cell"><span class="nut-val" id="nutFat">—</span><span class="nut-label">Fat</span></div></div><div class="product-form"><div class="form-row"><div class="form-field"><label>Store</label><input type="text" id="fStore" placeholder="Target, Costco..." /></div><div class="form-field"><label>Category</label><select id="fCategory"><option value="Grocery">Grocery</option><option value="Produce">Produce</option><option value="Dairy">Dairy</option><option value="Meat">Meat</option><option value="Frozen">Frozen</option><option value="Beverage">Beverage</option><option value="Snack">Snack</option><option value="Supplement">Supplement</option><option value="Medicine">Medicine</option><option value="Household">Household</option><option value="Other">Other</option></select></div></div><div class="form-row"><div class="form-field"><label>Qty</label><input type="number" id="fQty" value="1" min="1" /></div><div class="form-field"><label>Price ($)</label><input type="number" id="fPrice" placeholder="0.00" step="0.01" /></div></div><div class="form-field"><label>Expiry Date (optional)</label><input type="date" id="fExpiry" /></div><button class="save-btn" id="saveBtn" onclick="saveToSheet()">Save to Google Sheet</button></div></div>
+<div class="history-section" style="margin-top:20px;"><div class="section-title">Recent Scans</div><div id="historyList"><p style="font-size:12px;color:var(--muted);padding:8px 0;">No scans yet this session</p></div></div>
+<div class="toast" id="toast"></div>
+<script>
+let scanning=false,currentProduct=null,sessionHistory=[],sheetConnected=false;
+const SHEET_ID_KEY='healthscan_sheet_id',TOKEN_KEY='healthscan_token';
+window.addEventListener('load',()=>{const sid=localStorage.getItem(SHEET_ID_KEY),tok=localStorage.getItem(TOKEN_KEY);if(sid)document.getElementById('sheetId').value=sid;if(tok)document.getElementById('accessToken').value=tok;if(sid&&tok){sheetConnected=true;document.getElementById('statusDot').classList.add('connected');document.getElementById('setupPanel').classList.add('hidden');}});
+function connectSheet(){const sid=document.getElementById('sheetId').value.trim(),tok=document.getElementById('accessToken').value.trim();if(!sid||!tok){showToast('Please fill in both fields','error');return;}localStorage.setItem(SHEET_ID_KEY,sid);localStorage.setItem(TOKEN_KEY,tok);sheetConnected=true;document.getElementById('statusDot').classList.add('connected');document.getElementById('setupPanel').classList.add('hidden');showToast('Connected to Google Sheet','success');}
+function toggleSetup(){document.getElementById('setupPanel').classList.toggle('hidden');}
+function startScanner(){document.getElementById('scannerPlaceholder').classList.add('hidden');document.getElementById('scannerContainer').classList.remove('hidden');document.getElementById('startBtn').classList.add('hidden');document.getElementById('stopBtn').classList.remove('hidden');Quagga.init({inputStream:{name:'Live',type:'LiveStream',target:document.getElementById('scanner-viewport'),constraints:{facingMode:'environment',width:{ideal:640},height:{ideal:640}}},locator:{patchSize:'medium',halfSample:true},numOfWorkers:2,frequency:10,decoder:{readers:['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader']},locate:true},(err)=>{if(err){showToast('Camera error: '+err.message,'error');stopScanner();return;}Quagga.start();scanning=true;});let lastCode='',lastTime=0;Quagga.onDetected((result)=>{const code=result.codeResult.code,now=Date.now();if(code===lastCode&&now-lastTime<3000)return;lastCode=code;lastTime=now;if(navigator.vibrate)navigator.vibrate(100);stopScanner();lookupBarcode(code);});}
+function stopScanner(){if(scanning){Quagga.stop();scanning=false;}document.getElementById('scannerContainer').classList.add('hidden');document.getElementById('scannerPlaceholder').classList.remove('hidden');document.getElementById('startBtn').classList.remove('hidden');document.getElementById('stopBtn').classList.add('hidden');}
+function lookupManual(){const code=document.getElementById('manualBarcode').value.trim();if(!code){showToast('Enter a barcode number','error');return;}lookupBarcode(code);}
+async function lookupBarcode(barcode){showLoading('Looking up product...');try{const r=await fetch('https://world.openfoodfacts.org/api/v0/product/'+barcode+'.json');const data=await r.json();if(data.status===1){const p=data.product,n=p.nutriments||{};currentProduct={barcode,name:p.product_name||p.generic_name||'Unknown Product',brand:p.brands||'',image:p.image_front_small_url||p.image_url||'',calories:Math.round(n['energy-kcal_100g']||n['energy-kcal']||0),protein:parseFloat(n.proteins_100g||n.proteins||0).toFixed(1),carbs:parseFloat(n.carbohydrates_100g||n.carbohydrates||0).toFixed(1),fat:parseFloat(n.fat_100g||n.fat||0).toFixed(1),category:guessCategory(p)};showProduct(currentProduct);showToast('Product found!','success');}else{currentProduct={barcode,name:'Unknown Product',brand:'',image:'',calories:'',protein:'',carbs:'',fat:'',category:'Other'};showProduct(currentProduct,true);showToast('Product not in database - fill in manually','info');}}catch(e){showToast('Lookup failed - check connection','error');}hideLoading();}
+function guessCategory(p){const cats=(p.categories||'').toLowerCase();if(cats.includes('beverage')||cats.includes('drink'))return 'Beverage';if(cats.includes('dairy')||cats.includes('milk')||cats.includes('cheese'))return 'Dairy';if(cats.includes('meat')||cats.includes('poultry')||cats.includes('fish'))return 'Meat';if(cats.includes('frozen'))return 'Frozen';if(cats.includes('snack')||cats.includes('chip')||cats.includes('cookie'))return 'Snack';if(cats.includes('supplement')||cats.includes('vitamin'))return 'Supplement';if(cats.includes('produce')||cats.includes('fruit')||cats.includes('vegetable'))return 'Produce';return 'Grocery';}
+function showProduct(p,notFound=false){document.getElementById('productName').textContent=p.name;document.getElementById('productBrand').textContent=p.brand;document.getElementById('productBarcode').textContent='UPC: '+p.barcode;document.getElementById('nutCal').textContent=p.calories||'—';document.getElementById('nutPro').textContent=p.protein||'—';document.getElementById('nutCarb').textContent=p.carbs||'—';document.getElementById('nutFat').textContent=p.fat||'—';const imgWrap=document.getElementById('productImgWrap');imgWrap.innerHTML=p.image?'<img class="product-img" src="'+p.image+'" alt="" onerror="this.parentNode.innerHTML='<div class=\\'product-img-placeholder\\'>🛒</div>'" />':'<div class="product-img-placeholder">🛒</div>';document.getElementById('fCategory').value=p.category;const card=document.getElementById('productCard');card.classList.remove('hidden','success','not-found','scan-success-pulse');card.classList.add(notFound?'not-found':'success');void card.offsetWidth;card.classList.add('scan-success-pulse');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
+async function saveToSheet(){if(!currentProduct)return;const sid=localStorage.getItem(SHEET_ID_KEY),tok=localStorage.getItem(TOKEN_KEY);if(!sid||!tok){document.getElementById('setupPanel').classList.remove('hidden');showToast('Please connect your Google Sheet first','error');return;}const btn=document.getElementById('saveBtn');btn.disabled=true;btn.textContent='Saving...';const today=new Date().toLocaleDateString('en-US'),store=document.getElementById('fStore').value||'',category=document.getElementById('fCategory').value,qty=document.getElementById('fQty').value||'1',price=document.getElementById('fPrice').value||'',expiry=document.getElementById('fExpiry').value||'';const row=[today,store,currentProduct.name,currentProduct.brand,currentProduct.barcode,category,qty,'ea',price,currentProduct.calories,currentProduct.protein,currentProduct.carbs,currentProduct.fat,expiry,''];try{const r=await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sid+'/values/Purchases!A:O:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify({values:[row]})});if(r.ok){showToast('Saved to Google Sheet','success');addToHistory(currentProduct,store,price);document.getElementById('productCard').classList.add('hidden');document.getElementById('manualBarcode').value='';document.getElementById('fPrice').value='';document.getElementById('fQty').value='1';document.getElementById('fExpiry').value='';currentProduct=null;}else{const err=await r.json();if(r.status===401){showToast('Token expired - please update in setup','error');document.getElementById('setupPanel').classList.remove('hidden');}else{showToast('Save failed: '+(err.error?.message||r.status),'error');}}}catch(e){showToast('Network error: '+e.message,'error');}btn.disabled=false;btn.textContent='Save to Google Sheet';}
+function addToHistory(product,store,price){sessionHistory.unshift({product,store,price,time:new Date()});renderHistory();}
+function renderHistory(){const list=document.getElementById('historyList');if(sessionHistory.length===0){list.innerHTML='<p style="font-size:12px;color:var(--muted);padding:8px 0;">No scans yet this session</p>';return;}list.innerHTML=sessionHistory.slice(0,8).map(h=>'<div class="history-item"><div class="history-name">'+h.product.name+'</div><div class="history-meta">'+(h.price?'$'+parseFloat(h.price).toFixed(2)+'<br>':'')+'<span style="opacity:0.5">'+h.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+'</span></div></div>').join('');}
+function showLoading(msg){document.getElementById('loadingText').textContent=msg;document.getElementById('loadingIndicator').classList.remove('hidden');document.getElementById('productCard').classList.add('hidden');}
+function hideLoading(){document.getElementById('loadingIndicator').classList.add('hidden');}
+let toastTimer;function showToast(msg,type='info'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+type+' show';clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),3000);}
+</script>
+</body>
+</html>
